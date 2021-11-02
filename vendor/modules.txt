@@ -1,0 +1,44 @@
+# github.com/davecgh/go-spew v1.1.0
+github.com/davecgh/go-spew/spew
+# github.com/gomodule/redigo v1.8.4
+## explicit
+github.com/gomodule/redigo/redis
+# github.com/mattn/go-runewidth v0.0.3
+github.com/mattn/go-runewidth
+# github.com/pelletier/go-toml v1.9.0
+## explicit
+github.com/pelletier/go-toml
+# github.com/peterh/liner v1.2.1
+## explicit
+github.com/peterh/liner
+# github.com/pmezard/go-difflib v1.0.0
+github.com/pmezard/go-difflib/difflib
+# github.com/roseduan/mmap-go v1.0.0
+## explicit
+github.com/roseduan/mmap-go
+# github.com/stretchr/testify v1.7.0
+## explicit
+github.com/stretchr/testify/assert
+# github.com/tidwall/btree v0.5.0
+## explicit
+github.com/tidwall/btree
+# github.com/tidwall/match v1.0.3
+github.com/tidwall/match
+# github.com/tidwall/redcon v1.4.1
+## explicit
+github.com/tidwall/redcon
+# github.com/vmihailenco/msgpack/v5 v5.3.4
+## explicit
+github.com/vmihailenco/msgpack/v5
+github.com/vmihailenco/msgpack/v5/msgpcode
+# github.com/vmihailenco/tagparser/v2 v2.0.0
+github.com/vmihailenco/tagparser/v2
+github.com/vmihailenco/tagparser/v2/internal
+github.com/vmihailenco/tagparser/v2/internal/parser
+# golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c
+## explicit
+golang.org/x/sys/internal/unsafeheader
+golang.org/x/sys/unix
+golang.org/x/sys/windows
+# gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
+gopkg.in/yaml.v3

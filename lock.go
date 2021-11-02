@@ -22,10 +22,11 @@ func newLockMgr(db *RoseDB) *LockMgr {
 
 // Lock locks the rw of dTypes for writing.
 func (lm *LockMgr) Lock(dTypes ...DataType) func() {
+	// 循环加锁
 	for _, t := range dTypes {
 		lm.locks[t].Lock()
 	}
-
+	// 循环解锁
 	unLockFunc := func() {
 		for _, t := range dTypes {
 			lm.locks[t].Unlock()
@@ -36,10 +37,11 @@ func (lm *LockMgr) Lock(dTypes ...DataType) func() {
 
 // RLock locks the rw of dTypes for reading.
 func (lm *LockMgr) RLock(dTypes ...DataType) func() {
+	// 循环加锁
 	for _, t := range dTypes {
 		lm.locks[t].RLock()
 	}
-
+	// 循环解锁
 	unLockFunc := func() {
 		for _, t := range dTypes {
 			lm.locks[t].RUnlock()

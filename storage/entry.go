@@ -41,10 +41,11 @@ type (
 	}
 
 	// Meta meta info.
+	//
 	Meta struct {
-		Key       []byte
-		Value     []byte
-		Extra     []byte // Extra info that operates the entry.
+		Key       []byte	//
+		Value     []byte	//
+		Extra     []byte 	// Extra info that operates the entry.
 		KeySize   uint32
 		ValueSize uint32
 		ExtraSize uint32
@@ -131,14 +132,14 @@ func (e *Entry) Encode() ([]byte, error) {
 
 // Decode decode the byte array and return the entry.
 func Decode(buf []byte) (*Entry, error) {
+	// 34B = CRC(4B) + KS(4B) + VS(4B) + ES(4B) + STATE(2B) + TS(8B) + TxID(8B)
+	crc := binary.BigEndian.Uint32(buf[0:4])
 	ks := binary.BigEndian.Uint32(buf[4:8])
 	vs := binary.BigEndian.Uint32(buf[8:12])
 	es := binary.BigEndian.Uint32(buf[12:16])
 	state := binary.BigEndian.Uint16(buf[16:18])
 	timestamp := binary.BigEndian.Uint64(buf[18:26])
 	txId := binary.BigEndian.Uint64(buf[26:34])
-	crc := binary.BigEndian.Uint32(buf[0:4])
-
 	return &Entry{
 		Meta: &Meta{
 			KeySize:   ks,

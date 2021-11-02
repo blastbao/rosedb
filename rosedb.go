@@ -82,8 +82,10 @@ const (
 )
 
 type (
+
 	// RoseDB the rosedb struct, represents a db instance.
 	RoseDB struct {
+
 		// Current active files of different data types, stored like this: map[DataType]*storage.DBFile.
 		activeFile      *sync.Map
 		archFiles       ArchivedFiles // The archived files.
@@ -106,6 +108,8 @@ type (
 
 	// ArchivedFiles define the archived files, which mean these files can only be read.
 	// and will never be opened for writing.
+	//
+	// 归档文件表 map[list/string/xxx][fileId] => *DBFile
 	ArchivedFiles map[DataType]map[uint32]*storage.DBFile
 
 	// Expires saves the expire info of different keys.
@@ -143,6 +147,7 @@ func Open(config Config) (*RoseDB, error) {
 		return nil, err
 	}
 
+
 	db := &RoseDB{
 		activeFile: activeFiles,
 		archFiles:  archFiles,
@@ -156,6 +161,7 @@ func Open(config Config) (*RoseDB, error) {
 		txnMeta:    txnMeta,
 		cache:      cache.NewLruCache(config.CacheCapacity),
 	}
+
 	for i := 0; i < DataStructureNum; i++ {
 		db.expires[uint16(i)] = make(map[string]int64)
 	}
@@ -231,6 +237,7 @@ func (db *RoseDB) Sync() (err error) {
 		return nil
 	}
 
+	// 在 activeFile 中存储了 dataType => *DBFile 的映射，逐个 flush 刷盘。
 	db.activeFile.Range(func(key, value interface{}) bool {
 		if dbFile, ok := value.(*storage.DBFile); ok {
 			if err = dbFile.Sync(); err != nil {
@@ -304,6 +311,7 @@ func (db *RoseDB) StartMerge() (err error) {
 				fileId  uint32
 				fileIds []int
 			)
+
 			archFiles := mergedFiles[dType]
 			if archFiles == nil {
 				archFiles = make(map[uint32]*storage.DBFile)
@@ -607,14 +615,16 @@ func (db *RoseDB) saveConfig() (err error) {
 
 // build the indexes for different data structures.
 func (db *RoseDB) buildIndex(entry *storage.Entry, idx *index.Indexer, isOpen bool) (err error) {
+	// 如果是 string 类型，需要在索引信息 idx 中存储 value 信息
 	if db.config.IdxMode == KeyValueMemMode && entry.GetType() == String {
 		idx.Meta.Value = entry.Meta.Value
 		idx.Meta.ValueSize = uint32(len(entry.Meta.Value))
 	}
 
 	// uncommitted entry is invalid.
+	// 如果事务尚未提交，则不更新索引
 	if entry.TxId != 0 && isOpen {
-		if entry.TxId > db.txnMeta.MaxTxId {
+		if entry.TxId > db.txnMeta.MaxTxId { 	// ???
 			db.txnMeta.MaxTxId = entry.TxId
 		}
 		if _, ok := db.txnMeta.CommittedTxIds[entry.TxId]; !ok {
@@ -622,6 +632,7 @@ func (db *RoseDB) buildIndex(entry *storage.Entry, idx *index.Indexer, isOpen bo
 		}
 	}
 
+	// 根据数据类型，更新对应索引。
 	switch entry.GetType() {
 	case storage.String:
 		db.buildStringIndex(idx, entry)
@@ -641,12 +652,16 @@ func (db *RoseDB) buildIndex(entry *storage.Entry, idx *index.Indexer, isOpen bo
 func (db *RoseDB) store(e *storage.Entry) error {
 	// sync the db file if file size is not enough, and open a new db file.
 	config := db.config
+
+	// 获取当前活跃文件
 	activeFile, err := db.getActiveFile(e.GetType())
 	if err != nil {
 		return err
 	}
 
 	// Note that we need to reset offset when error happened, because we do this just like write failed too.
+	//
+	// 如果当前日志文件已满，就 flush 并创建新文件。
 	activeFile, changed, err := db.tryChangeActiveFile(e, activeFile)
 	if err != nil {
 		//activeFile.File.Truncate()
@@ -654,16 +669,21 @@ func (db *RoseDB) store(e *storage.Entry) error {
 	}
 
 	// need change, then store new File
+	// 保存当前活跃文件
 	if changed {
 		db.activeFile.Store(e.GetType(), activeFile)
 	}
 
 	// write entry to db file.
+	//
+	// 把 entry 写入到当前活跃文件
 	if err = activeFile.Write(e); err != nil {
 		return err
 	}
 
 	// persist db file according to the config.
+	//
+	// 刷盘
 	if config.Sync {
 		if err = activeFile.Sync(); err != nil {
 			return err
@@ -673,18 +693,21 @@ func (db *RoseDB) store(e *storage.Entry) error {
 	return nil
 }
 
+// 如果当前日志文件已满，就 flush 并创建新文件。
 func (db *RoseDB) tryChangeActiveFile(e *storage.Entry, curActiveFile *storage.DBFile) (*storage.DBFile, bool, error) {
 	config := db.config
 
+	// 大小超过限制
 	if curActiveFile.Offset > config.BlockSize {
+		// 刷盘
 		if err := curActiveFile.Sync(); err != nil {
 			return nil, true, err
 		}
-
 		// save the old db file as arched file.
+		// 归档
 		activeFileId := curActiveFile.Id
 		db.archFiles[e.GetType()][activeFileId] = curActiveFile
-
+		// 创建新文件
 		newDbFile, err := storage.NewDBFile(config.DirPath, activeFileId+1, config.RwMethod, config.BlockSize, e.GetType())
 		return newDbFile, true, err
 	}
@@ -834,6 +857,7 @@ func (db *RoseDB) checkExpired(key []byte, dType DataType) (expired bool) {
 	return
 }
 
+// 获取当前活跃文件
 func (db *RoseDB) getActiveFile(dType DataType) (file *storage.DBFile, err error) {
 	value, ok := db.activeFile.Load(dType)
 	if !ok || value == nil {

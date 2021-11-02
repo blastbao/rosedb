@@ -69,8 +69,11 @@ type DBFile struct {
 
 // NewDBFile create a new db file, truncate the file if rw method is mmap.
 func NewDBFile(path string, fileId uint32, method FileRWMethod, blockSize int64, eType uint16) (*DBFile, error) {
+
+	// 文件路径
 	filePath := path + PathSeparator + fmt.Sprintf(DBFileFormatNames[eType], fileId)
 
+	// 打开文件
 	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDWR, FilePerm)
 	if err != nil {
 		return nil, err
@@ -80,8 +83,15 @@ func NewDBFile(path string, fileId uint32, method FileRWMethod, blockSize int64,
 		return nil, err
 	}
 
-	df := &DBFile{Id: fileId, Path: path, Offset: stat.Size(), method: method}
+	// 创建对象
+	df := &DBFile{
+		Id: fileId,
+		Path: path,
+		Offset: stat.Size(),
+		method: method,
+	}
 
+	// 读写方式
 	if method == FileIO {
 		df.File = file
 	} else {
@@ -94,23 +104,31 @@ func NewDBFile(path string, fileId uint32, method FileRWMethod, blockSize int64,
 		}
 		df.mmap = m
 	}
+
 	return df, nil
 }
 
 // Read read data from the db file, offset is the start position of reading.
+//
+// 从 Offset 处读取一个 Entry 。
 func (df *DBFile) Read(offset int64) (e *Entry, err error) {
 	var buf []byte
 
 	// read entry header info.
+	//
+	// 从 offset 处读取 Header(34B)
 	if buf, err = df.readBuf(offset, int64(entryHeaderSize)); err != nil {
 		return
 	}
 
+	// 解析 Header 得到 entry
 	if e, err = Decode(buf); err != nil {
 		return
 	}
 
 	// read key if necessary(by the KeySize).
+	//
+	// 读取 Key
 	offset += entryHeaderSize
 	if e.Meta.KeySize > 0 {
 		var key []byte
@@ -121,6 +139,8 @@ func (df *DBFile) Read(offset int64) (e *Entry, err error) {
 	}
 
 	// read value if necessary.
+	//
+	// 读取 Value
 	offset += int64(e.Meta.KeySize)
 	if e.Meta.ValueSize > 0 {
 		var val []byte
@@ -131,6 +151,8 @@ func (df *DBFile) Read(offset int64) (e *Entry, err error) {
 	}
 
 	// read extra info if necessary.
+	//
+	// 读取 Extra
 	offset += int64(e.Meta.ValueSize)
 	if e.Meta.ExtraSize > 0 {
 		var val []byte
@@ -140,6 +162,7 @@ func (df *DBFile) Read(offset int64) (e *Entry, err error) {
 		e.Meta.Extra = val
 	}
 
+	// 校验 Crc(Value)
 	checkCrc := crc32.ChecksumIEEE(e.Meta.Value)
 	if checkCrc != e.crc32 {
 		return nil, ErrInvalidCrc
@@ -149,58 +172,68 @@ func (df *DBFile) Read(offset int64) (e *Entry, err error) {
 }
 
 func (df *DBFile) ReadAll() (map[int64]*Entry, error) {
-
+	// 将数据从文件读取到内存中
 	bf := bytes.Buffer{}
 	if _, err := bf.ReadFrom(df.File); err != nil {
 		return nil, err
 	}
-
 	byt := bf.Bytes()
 
+	// 逐个 Entry 读取，并保存到 entries[offset] => Entry
 	entryOffset := int64(0)
 	totalLen := int64(len(byt))
 	entries := make(map[int64]*Entry)
 	for entryOffset < totalLen {
-		endPos := entryHeaderSize
 
+		// 读取一个 Entry
+		endPos := entryHeaderSize
 		e, err := Decode(byt[:endPos])
 		if err != nil {
 			return nil, err
 		}
-		byt = byt[endPos:]
 
+		// 填充 Key
+		byt = byt[endPos:]
 		if e.Meta.KeySize > 0 {
 			endPos = int(e.Meta.KeySize)
 			e.Meta.Key = byt[:endPos]
 			byt = byt[endPos:]
 		}
 
+		// 填充 Value
 		if e.Meta.ValueSize > 0 {
 			endPos = int(e.Meta.ValueSize)
 			e.Meta.Value = byt[:endPos]
 			byt = byt[endPos:]
 		}
 
+		// 填充 Extra
 		if e.Meta.ExtraSize > 0 {
 			endPos = int(e.Meta.ExtraSize)
 			e.Meta.Extra = byt[:endPos]
 			byt = byt[endPos:]
 		}
 
+		// 校验 CRC(value)
 		checkCrc := crc32.ChecksumIEEE(e.Meta.Value)
 		if checkCrc != e.crc32 {
 			return nil, ErrInvalidCrc
 		}
 
+		// 保存 Offset => Entry
 		entries[entryOffset] = e
+
+		// 更新读取偏移
 		entryOffset += int64(e.Size())
 	}
+
 	return entries, nil
 }
 
 func (df *DBFile) readBuf(offset int64, n int64) ([]byte, error) {
 	buf := make([]byte, n)
 
+	// 文件 IO
 	if df.method == FileIO {
 		_, err := df.File.ReadAt(buf, offset)
 		if err != nil {
@@ -208,6 +241,7 @@ func (df *DBFile) readBuf(offset int64, n int64) ([]byte, error) {
 		}
 	}
 
+	// MMAP
 	if df.method == MMap && offset <= int64(len(df.mmap)) {
 		copy(buf, df.mmap[offset:])
 	}
@@ -272,6 +306,7 @@ func (df *DBFile) Sync() (err error) {
 
 // Build load all db files from disk.
 func Build(path string, method FileRWMethod, blockSize int64) (map[uint16]map[uint32]*DBFile, map[uint16]uint32, error) {
+
 	dir, err := ioutil.ReadDir(path)
 	if err != nil {
 		return nil, nil, err
@@ -283,6 +318,7 @@ func Build(path string, method FileRWMethod, blockSize int64) (map[uint16]map[ui
 		mergedFiles map[uint16]map[uint32]*DBFile
 		mErr        error
 	)
+
 	for _, d := range dir {
 		if d.IsDir() && strings.Contains(d.Name(), mergeDir) {
 			mergePath := path + string(os.PathSeparator) + d.Name()
